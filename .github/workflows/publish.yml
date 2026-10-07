@@ -1,0 +1,46 @@
+name: Import and verify source
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Import uploaded source archive
+        shell: python
+        run: |
+          import pathlib, zipfile
+          archive = pathlib.Path('Kernel-source-0.4.1.zip')
+          if archive.exists():
+              root = pathlib.Path.cwd().resolve()
+              with zipfile.ZipFile(archive) as source:
+                  names = [item.filename for item in source.infolist()]
+                  if len(names) != len(set(names)):
+                      raise ValueError('Duplicate archive entries')
+                  for name in names:
+                      target = (root / name).resolve()
+                      if not target.is_relative_to(root) or '.git' in pathlib.Path(name).parts:
+                          raise ValueError('Invalid source archive path')
+                  source.extractall(root)
+              archive.unlink()
+      - name: Verify browser unit tests
+        run: node --test test/*.test.cjs
+      - name: Commit imported source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add --all
+          if ! git diff --cached --quiet; then
+            git commit -m "Import Kernel Browser 0.4.1 source"
+            git push
+          fi
