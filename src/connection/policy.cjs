@@ -1,0 +1,7 @@
+const MODES=['direct','smart','tunnel','proxy'];
+function hostOf(url){try{return new URL(url).hostname.toLowerCase();}catch{return '';}}
+function resolvePolicy({tab,url,workspace,global,sites}){const specific=tab&&tab.mode!=='smart'?tab:null;const site=sites?.[hostOf(url)];return specific||((site&&site.enabled!==false&&site.mode!=='smart')?site:null)||(workspace?.mode!=='smart'?workspace:null)||(global?.mode!=='smart'?global:null)||{mode:'direct'};}
+function profileFor(route,profiles){if(route.mode==='direct')return null;const list=profiles.filter(p=>route.mode==='tunnel'?p.type==='tor':p.type!=='tor');return list.find(p=>p.id===route.profileId)||(!route.profileId?list[0]:null);}
+function failover(route,profiles,failed,enabled){if(!enabled||route.mode==='direct')return null;return profiles.find(p=>p.id!==failed&&(route.mode==='tunnel'?p.type==='tor':p.type!=='tor'))||null;}
+function validateProxy(data){const type=String(data.type);if(!['http','https','socks5'].includes(type))throw Error('Поддерживаются HTTP, HTTPS CONNECT и SOCKS5.');const host=String(data.host||'').trim().replace(/^\[|\]$/g,'');if(!/^[a-z\d.:_-]{1,253}$/i.test(host)||host.includes('..'))throw Error('Неверный адрес прокси.');const port=Number(data.port);if(!Number.isInteger(port)||port<1||port>65535)throw Error('Порт: от 1 до 65535.');return{type,host,port,name:String(data.name||host).slice(0,64),region:String(data.region||'').slice(0,64)};}
+module.exports={MODES,hostOf,resolvePolicy,profileFor,failover,validateProxy};
