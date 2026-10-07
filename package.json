@@ -1,7 +1,7 @@
 {
   "name": "kernel-browser",
   "productName": "Kernel",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Browser with vertical tabs, configurable interface and local chat",
   "main": "src/main.cjs",
   "author": "Kernel contributors",

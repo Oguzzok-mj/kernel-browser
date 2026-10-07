@@ -16,9 +16,11 @@ app.commandLine.appendSwitch('dns-prefetch-disable');
 
 const smoke = process.argv.includes('--smoke-test');
 const accountSmokeIndex=process.argv.indexOf('--account-smoke-test');
-if (smoke||accountSmokeIndex>=0||process.argv.includes('--tools-smoke-test')) app.disableHardwareAcceleration();
+const authSmokeIndex=process.argv.indexOf('--auth-smoke-test');
+if (smoke||accountSmokeIndex>=0||authSmokeIndex>=0||process.argv.includes('--tools-smoke-test')) app.disableHardwareAcceleration();
 if (smoke) app.setPath('userData', path.resolve(__dirname, '../../smoke-profile-' + Date.now()));
 else if(accountSmokeIndex>=0)app.setPath('userData',path.resolve(process.argv[accountSmokeIndex+1]));
+else if(authSmokeIndex>=0)app.setPath('userData',path.resolve(process.argv[authSmokeIndex+1]));
 else if(process.argv.includes('--tools-smoke-test'))app.setPath('userData',path.resolve(process.argv[process.argv.indexOf('--tools-smoke-test')+1]));
 else app.setPath('userData', path.join(app.getPath('appData'), 'Kernel'));
 app.setName('Kernel');
@@ -26,6 +28,7 @@ const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) app.quit();
 let win, assistant, bypass, activeId, panel = '', overlay = false, findVisible = false, stateTimer, saveTimer;
 const tabs = []; const closedTabs = []; const downloads = []; let attached = null;
+const pageWindows=new Set();
 const rootData=app.getPath('userData');
 let accounts,profileFile,saved,settings,bookmarks,history,webPartition,uiPartition;
 let htmlFullscreen='',manualFullscreen=false,tools,connection,utilityOverlay=false;
@@ -67,7 +70,8 @@ function exitContentFullscreen(notifyPage=true){
   if(notifyPage&&wc&&!wc.isDestroyed())wc.executeJavaScript('if(document.fullscreenElement)document.exitFullscreen()').catch(()=>{});
   if(win&&!win.isDestroyed())win.setFullScreen(manualFullscreen);layout();broadcast();
 }
-async function restartProfile(){for(const ctx of connection.contexts.values()){ctx.session.flushStorageData();await ctx.session.cookies.flushStore();}session.fromPartition(webPartition).flushStorageData();session.fromPartition(uiPartition).flushStorageData();await session.fromPartition(webPartition).cookies.flushStore();if(process.env.PORTABLE_EXECUTABLE_FILE)app.relaunch({execPath:process.env.PORTABLE_EXECUTABLE_FILE,args:process.argv.slice(1).filter(a=>!/^https?:\/\//i.test(a))});else app.relaunch({args:process.argv.slice(1).filter(a=>!/^https?:\/\//i.test(a))});win.close();}
+async function flushSessions(){const sessions=new Set([session.fromPartition(webPartition),session.fromPartition(uiPartition),...Array.from(connection?.contexts.values()||[],c=>c.session)]);for(const t of tabs)if(t.view&&!t.view.webContents.isDestroyed())sessions.add(t.view.webContents.session);for(const child of pageWindows)if(!child.isDestroyed())sessions.add(child.webContents.session);await Promise.all(Array.from(sessions,async ses=>{ses.flushStorageData();await ses.cookies.flushStore();}));}
+async function restartProfile(){await flushSessions();if(process.env.PORTABLE_EXECUTABLE_FILE)app.relaunch({execPath:process.env.PORTABLE_EXECUTABLE_FILE,args:process.argv.slice(1).filter(a=>!/^https?:\/\//i.test(a))});else app.relaunch({args:process.argv.slice(1).filter(a=>!/^https?:\/\//i.test(a))});win.close();}
 let accountChanging=false;
 async function changeAccount(action,data){if(accountChanging)throw new Error('Открывается другой профиль.');accountChanging=true;try{const result=await accounts[action](data);setTimeout(restartProfile,150);return result;}catch(e){accountChanging=false;throw e;}}
 function focusAddress() { win.webContents.focus(); emit('focus-address'); }
@@ -101,6 +105,19 @@ function onKey(event, input) {
   if (handled) event.preventDefault();
 }
 function allowedNavigation(event, url) { if (!/^https?:\/\//i.test(url)) event.preventDefault(); }
+function installPageWindowHandler(wc){
+  wc.setWindowOpenHandler(({url})=>{
+    if((!/^https?:\/\//i.test(url)&&url!=='about:blank')||pageWindows.size>=20)return {action:'deny'};
+    return {action:'allow',overrideBrowserWindowOptions:{parent:win,frame:true,autoHideMenuBar:true,width:600,height:760,minWidth:420,minHeight:400,show:!process.argv.includes('--background-test'),backgroundColor:'#101112',icon:path.join(__dirname,'../assets/kernel.png'),webPreferences:{session:wc.session,sandbox:true,contextIsolation:true,nodeIntegration:false,webSecurity:true,allowRunningInsecureContent:false}}};
+  });
+  wc.on('did-create-window',child=>{
+    pageWindows.add(child);child.setMenu(null);const childWC=child.webContents,childSession=childWC.session;setupSession(childSession);installPageWindowHandler(childWC);
+    const updateTitle=()=>{try{child.setTitle(new URL(childWC.getURL()).host+' — Kernel');}catch{child.setTitle('Kernel');}};
+    childWC.on('page-title-updated',event=>{event.preventDefault();updateTitle();});childWC.on('did-navigate',updateTitle);
+    childWC.on('will-navigate',allowedNavigation);childWC.on('will-redirect',allowedNavigation);
+    child.on('closed',()=>{pageWindows.delete(child);childSession.cookies.flushStore().catch(()=>{});});
+  });
+}
 function ensureView(tab) {
   if (tab.view || tab.url === 'kernel://newtab') return;
   tab.view = new WebContentsView({ webPreferences: { partition: connection?.partitionFor(tab.id,tab.url)||webPartition, sandbox: true, contextIsolation: true, nodeIntegration: false, webSecurity: true, allowRunningInsecureContent: false, spellcheck: settings.spellcheck } });
@@ -111,7 +128,7 @@ function ensureView(tab) {
   wc.on('before-input-event', onKey);
   const routeNavigation=(event,url,isInPlace,isMainFrame=true)=>{allowedNavigation(event,url);if(isMainFrame&&/^https?:\/\//i.test(url)&&connection&&connection.partitionFor(tab.id,url)!==tab.networkPartition){event.preventDefault();replaceTabRoute(tab,url);}};
   wc.on('will-navigate',routeNavigation);wc.on('will-redirect',routeNavigation);wc.on('did-start-navigation',(_e,url,inPlace,isMainFrame)=>{if(isMainFrame&&!inPlace)tab.redirects=[];});wc.on('will-redirect',(_e,url,_inPlace,isMainFrame)=>{if(isMainFrame){tab.redirects||=[];tab.redirects.push({url:wc.getURL()||tab.url,to:url,status:'redirect'});}});
-  wc.setWindowOpenHandler(({ url }) => { try { if (/^https?:\/\//i.test(url)) createTab(url); } catch {} return { action: 'deny' }; });
+  installPageWindowHandler(wc);
   wc.on('did-start-loading', () => { tab.loading = true; tab.error = ''; layout(); broadcast(); });
   wc.on('did-stop-loading', () => { tab.loading = false; broadcast(); });
   wc.on('page-title-updated', (_e, title) => { tab.title = title.slice(0, 200); broadcast(); persist(); });
@@ -142,13 +159,14 @@ function ensureView(tab) {
     if (params.isEditable) items.push({ role: 'cut', label: 'Вырезать' }, { role: 'paste', label: 'Вставить' });
     items.push({type:'separator'},{label:'Копировать чистую ссылку',click:()=>tools.copy(require('./tools/pure.cjs').cleanURL(params.linkURL||tab.url))},{label:'Сохранить страницу',click:()=>runTool('save',{mode:'snapshot'})},{label:'Скриншот всей страницы',click:()=>runTool('screenshot',{kind:'full'})},{label:'Инспектор элемента / шрифта',click:()=>runTool('inspect')},{label:'Открыть Split View',click:()=>{openUtility('tools');emit('tools-command','split');}},{label:'Спросить ИИ о странице',click:()=>{openUtility('ai');emit('ask-selection','Кратко перескажи текущую страницу.');emit('page-context-enable');}});
     items.push({ type: 'separator' }, { label: 'Назад', enabled: wc.navigationHistory.getActiveIndex() > 0, click: () => navigateHistory('back') }, { label: 'Обновить', click: () => wc.reload() });
+    if(/^https:\/\//i.test(wc.getURL()))items.push({label:'Открыть в системном браузере',click:()=>shell.openExternal(wc.getURL())});
     Menu.buildFromTemplate(items).popup({ window: win });
   });
   const loading=tab.url;const prepare=connection?connection.prepare(tab.id,loading):Promise.resolve(wc.session);prepare.then(ses=>{if(wc.isDestroyed()||tab.view?.webContents!==wc)return;if(ses!==wc.session){replaceTabRoute(tab,loading);return;}wc.loadURL(loading).catch(()=>{});}).catch(e=>{if(!wc.isDestroyed()){tab.error=e.message;tab.loading=false;layout();broadcast();}});
 }
 function openUtility(value){panel=value;overlay=false;utilityOverlay=false;layout();broadcast();}
 async function runTool(name,input={}){if(['save','inspect','screenshot','pdf','markdown'].includes(name))openUtility('tools');try{const result=await tools.action(name,input);emit('tools-result',{name,result});broadcast();return result;}catch(e){tools.log('ERROR',e.message);emit('tools-result',{name,error:e.message});throw e;}}
-function suspendTab(tab){if(tab.view){if(attached===tab.view){win.contentView.removeChildView(attached);attached=null;}if(!tab.view.webContents.isDestroyed())tab.view.webContents.close({waitForBeforeUnload:false});tab.view=null;}tab.sleeping=true;}
+function suspendTab(tab){if(tab.view){const view=tab.view;tab.view=null;if(attached===view){win.contentView.removeChildView(view);attached=null;}if(!view.webContents.isDestroyed())view.webContents.close({waitForBeforeUnload:false});}tab.sleeping=true;}
 function replaceTabRoute(tab,url=tab.url){suspendTab(tab);tab.url=url;tab.error='';ensureView(tab);layout();broadcast();persist();}
 async function applyRoute(data){const tab=tabs.find(t=>t.id===(data.tabId||activeId));if(!tab)throw Error('Вкладка закрыта.');connection.assign({...data,tabId:tab.id,url:tab.url});for(const t of tabs)if(t.view&&(t.id===tab.id||t.networkPartition!==connection.partitionFor(t.id,t.url)))replaceTabRoute(t);layout();broadcast();persist();}
 function createTab(address = settings.newTab==='home'?settings.homepage:'kernel://newtab', opts = {}) {
@@ -165,7 +183,7 @@ function closeTab(id) {
   const i = tabs.findIndex(t => t.id === id); if (i < 0) return;
   const tab = tabs[i]; closedTabs.unshift({ url: tab.url, title: tab.title, favicon:tab.favicon,pinned: tab.pinned }); closedTabs.length = Math.min(20, closedTabs.length);
   if (attached && attached === tab.view) { win.contentView.removeChildView(attached); attached = null; }
-  if (tab.view && !tab.view.webContents.isDestroyed()) tab.view.webContents.close({ waitForBeforeUnload: false });
+  const closingView=tab.view;tab.view=null;if (closingView && !closingView.webContents.isDestroyed()) closingView.webContents.close({ waitForBeforeUnload: false });
   connection?.tabs.delete(id);connection?.tabURLs.delete(id);connection?.prune();tabs.splice(i, 1);
   if (!tabs.length) createTab(); else if (activeId === id) selectTab(tabs[Math.min(i, tabs.length - 1)].id);
   layout(); broadcast(); persist();
@@ -281,7 +299,7 @@ const configuredSessions=new WeakSet();
 function setupSession(web=session.fromPartition(webPartition)) {
   if(configuredSessions.has(web))return;configuredSessions.add(web);
   web.setSpellCheckerEnabled(settings.spellcheck);
-  const active=wc=>!!wc&&wc===tabs.find(t=>t.id===activeId)?.view?.webContents;
+  const active=wc=>!!wc&&(wc===tabs.find(t=>t.id===activeId)?.view?.webContents||Array.from(pageWindows).some(child=>!child.isDestroyed()&&child.webContents===wc&&child.isFocused()));
   const origin=url=>{try{return new URL(url).origin;}catch{return '';}};
   web.setPermissionCheckHandler((wc,permission,securityOrigin)=>permissionAllowed(permission,settings,securityOrigin,active(wc)));
   web.setPermissionRequestHandler((wc,permission,callback,details)=>callback(permissionAllowed(permission,settings,origin(details.requestingUrl||wc.getURL()),active(wc))));
@@ -329,8 +347,10 @@ async function boot() {
   if(pendingLaunchURL){const url=pendingLaunchURL;pendingLaunchURL='';try{createTab(url);}catch{}}
   win.on('enter-full-screen',layout);win.on('leave-full-screen',()=>{if(htmlFullscreen)exitContentFullscreen();else{manualFullscreen=false;layout();broadcast();}});
   win.on('resize', layout); win.on('maximize', () => { layout(); broadcast(); }); win.on('unmaximize', () => { layout(); broadcast(); });
-  win.on('close', () => {
-    tools?.dispose();connection?.dispose();assistant.stop(); bypass.dispose(); clearTimeout(saveTimer);
+  let storageFlushed=false,closing=false;
+  win.on('close', event => {
+    if(!storageFlushed){event.preventDefault();if(!closing){closing=true;flushSessions().catch(error=>console.error('Storage flush failed:',error.message)).finally(()=>{storageFlushed=true;win.close();});}return;}
+    for(const child of pageWindows)if(!child.isDestroyed())child.close();tools?.dispose();connection?.dispose();assistant.stop(); bypass.dispose(); clearTimeout(saveTimer);
     atomicWrite(profileFile, { tabs: tabs.map(t => ({ url: t.url, title: t.title, favicon:t.favicon||'',pinned: t.pinned,route:connection?.tabs.get(t.id) })), activeIndex: tabs.findIndex(t => t.id === activeId), migrationVersion:3, bookmarks, history, settings, downloads:downloads.map(d=>({...d})) });
     for (const t of tabs) if (t.view && !t.view.webContents.isDestroyed()) t.view.webContents.close({ waitForBeforeUnload: false });
   });
@@ -339,6 +359,7 @@ async function boot() {
   if (smoke) require('../test/smoke.cjs').run({ app, win, state, createTab, selectTab, closeTab, pinTab, navigate, layout, assistant, bypass, tabs, pageContext, emit, accounts });
   if(toolsSmokeIndex>=0)require('../test/tools-smoke.cjs').run({app,win,tools,connection,state,createTab,selectTab,tabs,navigate,layout,runTool});
   if(accountSmokeIndex>=0)require('../test/accounts-smoke.cjs').run({app,win,accounts,state,createTab,tabs});
+  if(authSmokeIndex>=0)require('../test/auth-smoke.cjs').run({app,win,accounts,state,createTab,selectTab,tabs});
 }
 app.on('second-instance', (_event,argv) => {const url=getLaunchURL(argv);if(url){if(win&&tools){try{createTab(url);}catch{}}else pendingLaunchURL=url;} if (win) { if (win.isMinimized()) win.restore(); win.show();win.focus(); } });
 app.on('window-all-closed', () => app.quit());

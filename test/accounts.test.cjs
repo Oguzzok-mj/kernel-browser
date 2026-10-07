@@ -24,3 +24,24 @@ test('fullscreen and ordinary interactive permissions are silent; sensitive perm
   assert.equal(permissionAllowed('media',{...DEFAULTS,mediaPermission:'allow'},'https://example.com',true),true);
   assert.equal(permissionAllowed('media',{...DEFAULTS,mediaPermission:'allow',sitePermissions:{'https://example.com':{media:'block'}}},'https://example.com',true),false);
 });
+
+test('an already running guest sees accounts restored on disk and cannot overwrite newer records',async()=>{
+  const {store,options}=setup();const other=new Accounts(options);const alice=await other.create({name:'Alice',password:'Alice test password'});
+  assert.equal(store.list()[0].id,alice.id);await store.login({login:alice.id,password:'Alice test password'});assert.equal(store.info().name,'Alice');
+  const stale=new Accounts(options);await store.create({name:'Bob',password:'Bob test password'});
+  assert.throws(()=>stale.save(),/обновлены другим процессом/);assert.equal(new Accounts(options).list().length,2);
+});
+
+test('damaged or missing account files recover the latest backup including owner identity and password',async()=>{
+  const {store,options,keys}=setup(),uid=crypto.randomUUID();const payload=Buffer.from(JSON.stringify({app:'kernel-browser',version:1,uid,id:'777',role:'developer'}));
+  store.importOwner({certificate:{payload:payload.toString('base64'),signature:crypto.sign(null,payload,keys.privateKey).toString('base64')}});await store.changePassword({password:'Owner test password'});
+  const expected=fs.readFileSync(store.backupFile,'utf8');fs.writeFileSync(store.file,'{"accounts":');
+  const recovered=new Accounts(options);assert.equal(recovered.info().id,'777');assert.equal(recovered.info().developer,true);await recovered.login({login:'777',password:'Owner test password'});
+  assert.ok(fs.readdirSync(store.root).some(f=>f.startsWith('accounts.damaged-')));fs.unlinkSync(store.file);
+  assert.equal(new Accounts(options).list()[0].id,'777');assert.ok(expected.includes('777'));
+});
+
+test('unrecoverable account data is preserved instead of being replaced with an empty guest list',()=>{
+  const {store,options}=setup();fs.writeFileSync(store.file,'broken');fs.writeFileSync(store.backupFile,'broken backup');
+  assert.throws(()=>new Accounts(options),/Файлы сохранены без изменений/);assert.equal(fs.readFileSync(store.file,'utf8'),'broken');
+});

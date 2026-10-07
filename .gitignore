@@ -22,3 +22,8 @@ owner-profile-import.json
 owner-signing-private.pem
 .env
 .env.*
+
+accounts.backup.json
+accounts.damaged-*.json
+auth-regression*/
+account-regression*/
