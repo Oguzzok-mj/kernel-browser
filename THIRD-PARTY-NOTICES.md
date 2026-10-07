@@ -32,7 +32,7 @@ Unmodified upstream distribution: Flowseal/zapret-discord-youtube 1.10.3, publis
 - Cygwin 3.4.10: https://cygwin.com/ ; GPL, with upstream linking exception; GNU GPL text in `vendor/CYGWIN-COPYING.txt`
 - Corresponding Cygwin source: https://cygwin.com/git/?p=newlib-cygwin.git;a=shortlog;h=refs/tags/cygwin-3_4_10-release
 
-The release includes `Kernel-third-party-sources.zip` alongside the installer. It contains the complete upstream WinDivert v2.2.2 source archive (including build scripts) and the Cygwin 3.4.10-1 source package (including its packaging/build recipe). Kernel selects the LGPL-3.0 option for WinDivert, links the unmodified library dynamically and permits replacement with a compatible modified library and debugging of such modifications. No Kernel restriction prevents this; driver signing requirements are imposed by Windows. Cygwin retains its upstream GPL terms and linking exception. Preserve all notices and redistribute the corresponding source bundle whenever mirroring the binaries. Details and SHA-256 digests: `docs/THIRD-PARTY-SOURCES.md`. Kernel does not claim ownership of these components. SHA-256 provenance for retrieved release archives and weights is in `vendor/provenance.json`.
+This is a personal development build. Before public redistribution of the complete binary bundle, preserve all upstream notices and provide the corresponding source/build material required by WinDivert and Cygwin licenses. Kernel does not claim ownership of these components. SHA-256 provenance for retrieved release archives and weights is in `vendor/provenance.json`.
 
 ## Connection / Tor
 
@@ -48,3 +48,7 @@ Tor uses the 3-clause BSD license. Complete bundled notices (Tor, lyrebird inclu
 - node-qrcode 1.5.4: MIT, https://github.com/soldair/node-qrcode ; node_modules/qrcode/license.
 - Transitive dependency licenses are retained with their packages inside resources/app.asar; exact versions and integrity hashes are pinned in package-lock.json.
 - Currency conversion uses ExchangeRate-API Open Access, https://www.exchangerate-api.com/docs/free . Rates update daily; the result includes its timestamp and required provider attribution.
+
+## Automatic updates
+
+- electron-updater 6.8.9: MIT, https://github.com/electron-userland/electron-builder/tree/master/packages/electron-updater . License retained in assets/licenses/electron-updater.txt inside resources/app.asar. Transitive notices and pinned integrity hashes are retained with their packages and package-lock.json.

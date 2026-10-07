@@ -117,6 +117,13 @@ function renderSettings(){
   $('download-directory').value=current.downloadDirectory||s.downloadDirectory;
   $('permission-count').textContent='Сохранено сайтов: '+Object.keys(s.sitePermissions).length;
   $('app-version').textContent=current.version;
+  const u=current.updates||{}, busy=['checking','downloading'].includes(u.status);
+  const labels={idle:'Проверка выполняется при запуске и каждые 6 часов.',checking:'Проверяем обновления...',available:'Доступна версия '+u.version,downloading:'Скачивается версия '+u.version+' - '+u.progress+'%',downloaded:'Версия '+u.version+' скачана.'+(u.automatic?' Установится после закрытия браузера.':' Можно установить сейчас.'),current:'Установлена последняя версия.',error:'Не удалось проверить или скачать обновление. Повторим позже.',unsupported:'Автообновления доступны в установленной версии для Windows.'};
+  $('update-status').textContent=labels[u.status]||'';
+  $('automatic-updates').checked=u.automatic!==false;$('automatic-updates').disabled=!u.supported;
+  $('check-update').disabled=!u.supported||busy||u.status==='downloaded';
+  $('install-update').classList.toggle('hidden',u.status!=='downloaded');
+  $('update-progress').classList.toggle('hidden',u.status!=='downloading');$('update-progress').value=u.progress||0;
 }
 function showSettingsSection(name){document.querySelectorAll('[data-section]').forEach(el=>el.classList.toggle('hidden',el.dataset.section!==name));document.querySelectorAll('[data-settings-page]').forEach(el=>el.classList.toggle('selected',el.dataset.settingsPage===name));document.querySelector('.settings-sections').scrollTop=0;}
 function accountAvatar(el,a){if(el.dataset.avatar===a.avatar&&el.dataset.name===a.name)return;el.dataset.avatar=a.avatar;el.dataset.name=a.name;el.replaceChildren();if(a.avatar&&/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(a.avatar)){const img=document.createElement('img');img.src=a.avatar;img.alt='';el.append(img);}else el.textContent=a.guest?'K':a.name.slice(0,1).toUpperCase();}
@@ -156,6 +163,9 @@ document.querySelectorAll('[data-setting]').forEach(el=>{
 });
 document.querySelectorAll('[data-settings-page]').forEach(el=>el.onclick=()=>showSettingsSection(el.dataset.settingsPage));
 $('custom-font').onchange=()=>{const value=$('custom-font').value.trim();if(!/^[\p{L}\p{N} .,_-]{1,64}$/u.test(value)){toast('Введите название установленного шрифта.');return;}call('settings',{fontFamily:value});};
+$('automatic-updates').onchange=()=>call('updates:automatic',$('automatic-updates').checked);
+$('check-update').onclick=()=>call('updates:check');
+$('install-update').onclick=()=>call('updates:install');
 $('reset-settings').onclick=()=>call('settings:reset');
 $('choose-directory').onclick=()=>call('download:directory');
 $('reset-permissions').onclick=()=>call('permissions:reset');

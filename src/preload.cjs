@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 const allowed = new Set(['state','tab:new','tab:select','tab:close','tab:pin','tab:reorder','tab:menu','navigate','history:navigate','reload','bookmark','panel','overlay','settings','history:clear','bookmark:remove','window','ai:install','ai:send','ai:cancel','bypass:start','bypass:stop','download:open','download:cancel','external']);
 for(const name of ['settings:reset','download:directory','privacy:clear','permissions:reset','home','find','find:close','browser:menu'])allowed.add(name);
 for(const name of ['account:create','account:login','account:logout','account:update','account:password','account:avatar','account:copy-id'])allowed.add(name);
+for(const name of ['updates:check','updates:automatic','updates:install'])allowed.add(name);
 for(const name of ['tools','palette:set','connection:apply','connection:proxy','connection:remove-profile','connection:options','connection:rule','connection:diagnose','download:pause','download:resume','download:retry'])allowed.add(name);
 const events = new Set(['state','focus-address','ai-status','ai-token','ai-action','ai-done','bypass-status','ask-selection']);
 for(const name of ['tools-log','tools-result','tools-command','palette-open','palette-close','page-context-enable'])events.add(name);

@@ -9,6 +9,7 @@ const { Bypass } = require('./bypass.cjs');
 const { DEFAULTS, sanitizeSettings, viewBounds, searchAddress } = require('./settings.cjs');
 const {loadFavicon,validFavicon}=require('./favicon.cjs');
 const {Accounts}=require('./accounts.cjs');
+const {Updates}=require('./updates.cjs');
 const {permissionAllowed}=require('./permissions.cjs');
 const {ConnectionManager}=require('./connection/manager.cjs');
 const {ToolService}=require('./tools/service.cjs');
@@ -32,6 +33,7 @@ const pageWindows=new Set();
 const rootData=app.getPath('userData');
 let accounts,profileFile,saved,settings,bookmarks,history,webPartition,uiPartition;
 let htmlFullscreen='',manualFullscreen=false,tools,connection,utilityOverlay=false;
+let updates, updateRestart=false;
 const toolsSmokeIndex=process.argv.indexOf('--tools-smoke-test');
 const getLaunchURL=args=>args.find(a=>typeof a==='string'&&a.length<=8192&&/^https?:\/\//i.test(a))||'';let pendingLaunchURL=getLaunchURL(process.argv.slice(1));
 const uiFile = path.join(__dirname, 'index.html');
@@ -46,7 +48,7 @@ function metadata(t) {
     back: !!wc && !wc.isDestroyed() && wc.navigationHistory.getActiveIndex() > 0, forward: !!wc && !wc.isDestroyed() && wc.navigationHistory.getActiveIndex() < wc.navigationHistory.length() - 1,
     audible: !!wc && !wc.isDestroyed() && wc.isCurrentlyAudible(), muted: t.muted || false, sleeping:!!t.sleeping, route:connection?.state(t.id,t.url) };
 }
-function state() { return { tabs: tabs.map(metadata), activeId, panel, overlay, findVisible, bookmarks, history: history.slice(0, 100), downloads, settings, ai: assistant?.info(), bypass: bypass?.info(), maximized: win?.isMaximized() || false, version: app.getVersion(), darkSystem:nativeTheme.shouldUseDarkColors, downloadDirectory:settings.downloadDirectory||app.getPath('downloads'),account:accounts.info(),accounts:accounts.list(),contentFullscreen:!!htmlFullscreen,tools:tools?.info(),connection:connection?.info(activeId,tabs.find(t=>t.id===activeId)?.url),utilityOverlay }; }
+function state() { return { tabs: tabs.map(metadata), activeId, panel, overlay, findVisible, bookmarks, history: history.slice(0, 100), downloads, settings, ai: assistant?.info(), bypass: bypass?.info(), maximized: win?.isMaximized() || false, version: app.getVersion(), updates:updates?.info(), darkSystem:nativeTheme.shouldUseDarkColors, downloadDirectory:settings.downloadDirectory||app.getPath('downloads'),account:accounts.info(),accounts:accounts.list(),contentFullscreen:!!htmlFullscreen,tools:tools?.info(),connection:connection?.info(activeId,tabs.find(t=>t.id===activeId)?.url),utilityOverlay }; }
 function broadcast() { clearTimeout(stateTimer); stateTimer = setTimeout(() => emit('state', state()), 25); }
 function persist() {
   clearTimeout(saveTimer); saveTimer = setTimeout(() => atomicWrite(profileFile, {
@@ -71,7 +73,7 @@ function exitContentFullscreen(notifyPage=true){
   if(win&&!win.isDestroyed())win.setFullScreen(manualFullscreen);layout();broadcast();
 }
 async function flushSessions(){const sessions=new Set([session.fromPartition(webPartition),session.fromPartition(uiPartition),...Array.from(connection?.contexts.values()||[],c=>c.session)]);for(const t of tabs)if(t.view&&!t.view.webContents.isDestroyed())sessions.add(t.view.webContents.session);for(const child of pageWindows)if(!child.isDestroyed())sessions.add(child.webContents.session);await Promise.all(Array.from(sessions,async ses=>{ses.flushStorageData();await ses.cookies.flushStore();}));}
-async function restartProfile(){await flushSessions();if(process.env.PORTABLE_EXECUTABLE_FILE)app.relaunch({execPath:process.env.PORTABLE_EXECUTABLE_FILE,args:process.argv.slice(1).filter(a=>!/^https?:\/\//i.test(a))});else app.relaunch({args:process.argv.slice(1).filter(a=>!/^https?:\/\//i.test(a))});win.close();}
+async function restartProfile(){await flushSessions();if(updates?.info().status==='downloaded'&&updates.info().automatic){updateRestart=true;win.close();return;}if(process.env.PORTABLE_EXECUTABLE_FILE)app.relaunch({execPath:process.env.PORTABLE_EXECUTABLE_FILE,args:process.argv.slice(1).filter(a=>!/^https?:\/\//i.test(a))});else app.relaunch({args:process.argv.slice(1).filter(a=>!/^https?:\/\//i.test(a))});win.close();}
 let accountChanging=false;
 async function changeAccount(action,data){if(accountChanging)throw new Error('Открывается другой профиль.');accountChanging=true;try{const result=await accounts[action](data);setTimeout(restartProfile,150);return result;}catch(e){accountChanging=false;throw e;}}
 function focusAddress() { win.webContents.focus(); emit('focus-address'); }
@@ -234,6 +236,9 @@ function registerIPC() {
     return fn(payload);
   });
   handle('state', () => state());
+  handle('updates:check', () => updates.check(true));
+  handle('updates:automatic', value => updates.configure(value));
+  handle('updates:install', () => {if(updates.info().status!=='downloaded')throw new Error('Обновление ещё не скачано.');updateRestart=true;win.close();});
   handle('tools',({name,input})=>runTool(name,input));
   handle('palette:set',value=>{utilityOverlay=!!value;layout();broadcast();});
   handle('connection:apply',applyRoute);
@@ -320,6 +325,8 @@ async function boot() {
   const provisionIndex=process.argv.indexOf('--import-owner');
   if(provisionIndex>=0){accounts.importOwner(readJSON(process.argv[provisionIndex+1],null));console.log('Owner profile imported.');app.quit();return;}
   if((smoke||toolsSmokeIndex>=0)&&process.env.KERNEL_TEST_OWNER_FILE)accounts.importOwner(readJSON(process.env.KERNEL_TEST_OWNER_FILE,null));
+  const updateSupported=app.isPackaged&&process.platform==='win32'&&!process.env.PORTABLE_EXECUTABLE_FILE&&!smoke&&accountSmokeIndex<0&&authSmokeIndex<0&&toolsSmokeIndex<0;
+  updates=new Updates({root:rootData,supported:updateSupported,updater:updateSupported?require('electron-updater').autoUpdater:null,changed:broadcast});
   const storage=accounts.storage();webPartition=storage.webPartition;uiPartition=storage.uiPartition;profileFile=path.join(storage.directory,'browser.json');
   saved=readJSON(profileFile,{});settings=sanitizeSettings(saved.settings);if(saved.migrationVersion!==3)settings.askDownload=false;
   for(const d of (saved.downloads||[]).slice(0,100))downloads.push({...d,status:d.status==='progressing'?'interrupted':d.status,paused:false});
@@ -346,6 +353,7 @@ async function boot() {
   else createTab(settings.startup==='home'?settings.homepage:'kernel://newtab');
   if(pendingLaunchURL){const url=pendingLaunchURL;pendingLaunchURL='';try{createTab(url);}catch{}}
   win.on('enter-full-screen',layout);win.on('leave-full-screen',()=>{if(htmlFullscreen)exitContentFullscreen();else{manualFullscreen=false;layout();broadcast();}});
+  win.on('query-session-end',()=>updates.sessionEnding());
   win.on('resize', layout); win.on('maximize', () => { layout(); broadcast(); }); win.on('unmaximize', () => { layout(); broadcast(); });
   let storageFlushed=false,closing=false;
   win.on('close', event => {
@@ -362,7 +370,8 @@ async function boot() {
   if(authSmokeIndex>=0)require('../test/auth-smoke.cjs').run({app,win,accounts,state,createTab,selectTab,tabs});
 }
 app.on('second-instance', (_event,argv) => {const url=getLaunchURL(argv);if(url){if(win&&tools){try{createTab(url);}catch{}}else pendingLaunchURL=url;} if (win) { if (win.isMinimized()) win.restore(); win.show();win.focus(); } });
-app.on('window-all-closed', () => app.quit());
+app.on('window-all-closed', () => {if(updateRestart&&updates?.info().status==='downloaded')updates.install(true);else if(updates?.shouldInstallOnQuit())updates.install(false);else app.quit();});
+app.on('will-quit',()=>updates?.dispose());
 if (gotLock) app.whenReady().then(boot).catch(error => { console.error(error); dialog.showErrorBox('Kernel', error.message); app.quit(); });
 
 
