@@ -1,9 +1,9 @@
 module.exports = {
-  name: 'Qwen3-4B',
-  parameters: '4B',
-  file: 'Qwen3-4B-Q4_K_M.gguf',
-  bytes: 2497280256,
-  sha256: '7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5',
-  url: 'https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/bc640142c66e1fdd12af0bd68f40445458f3869b/Qwen3-4B-Q4_K_M.gguf',
-  source: 'https://huggingface.co/Qwen/Qwen3-4B-GGUF'
+  name: 'Mistral NeMo Instruct 12B',
+  parameters: '12B',
+  file: 'Mistral-Nemo-Instruct-2407-Q4_K_M.gguf',
+  bytes: 7477208192,
+  sha256: '7c1a10d202d8788dbe5628dc962254d10654c853cae6aaeca0618f05490d4a46',
+  url: 'https://huggingface.co/bartowski/Mistral-Nemo-Instruct-2407-GGUF/resolve/a2dd64a0a76ea1bdb2bb6ab6fa5496b003c7c908/Mistral-Nemo-Instruct-2407-Q4_K_M.gguf',
+  source: 'https://huggingface.co/mistralai/Mistral-Nemo-Instruct-2407'
 };

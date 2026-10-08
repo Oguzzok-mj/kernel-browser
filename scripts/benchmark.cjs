@@ -8,7 +8,7 @@ async function run(mode){
   const port=await new Promise(r=>{const s=net.createServer();s.listen(0,'127.0.0.1',()=>{const p=s.address().port;s.close(()=>r(p));});});
   const key=crypto.randomBytes(24).toString('hex');
   const exe=path.resolve(__dirname,'../vendor',mode==='cpu'?'llama':'llama-vulkan','llama-server.exe');
-  const args=['-m',path.resolve(__dirname,'../../models/Qwen3-4B-Q4_K_M.gguf'),'--host','127.0.0.1','--port',String(port),'--api-key',key,'-c',mode==='cpu'?'8192':'4096','-t',mode==='cpu'?'8':'6','-ngl',mode==='cpu'?'0':'99','--jinja','--no-webui'];
+  const args=['-m',(process.env.KERNEL_MODEL_FILE||path.resolve(__dirname,'../../models',require('../src/model.cjs').file)),'--host','127.0.0.1','--port',String(port),'--api-key',key,'-c',mode==='cpu'?'8192':'4096','-t',mode==='cpu'?'8':'6','-ngl',mode==='cpu'?'0':'auto','--jinja','--no-webui'];
   const child=spawn(exe,args,{cwd:path.dirname(exe),windowsHide:true,stdio:['ignore','ignore','pipe']});let stderr='';child.stderr.on('data',d=>stderr=(stderr+d).slice(-18000));
   const start=Date.now();
   try{

@@ -3,7 +3,7 @@ node_modules/
 vendor/llama/
 vendor/llama-vulkan/
 vendor/tor/
-vendor/zapret/
+# zapret scripts and data are source fixtures; executable binaries stay ignored
 *.gguf
 *.part
 *.log

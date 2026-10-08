@@ -11,18 +11,19 @@
     "publishedAt": "2026-09-20T08:46:37Z"
   },
   "model": {
-    "parameters": "4B",
-    "name": "Qwen3-4B-Q4_K_M",
-    "bytes": 2497280256,
-    "source": "https://huggingface.co/Qwen/Qwen3-4B-GGUF",
-    "revision": "bc640142c66e1fdd12af0bd68f40445458f3869b",
-    "sha256": "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5"
+    "parameters": "12B",
+    "name": "Mistral NeMo Instruct 12B Q4_K_M",
+    "bytes": 7477208192,
+    "source": "https://huggingface.co/mistralai/Mistral-Nemo-Instruct-2407",
+    "quantizedSource": "https://huggingface.co/bartowski/Mistral-Nemo-Instruct-2407-GGUF",
+    "revision": "a2dd64a0a76ea1bdb2bb6ab6fa5496b003c7c908",
+    "sha256": "7c1a10d202d8788dbe5628dc962254d10654c853cae6aaeca0618f05490d4a46"
   },
   "electron": {
     "source": "https://github.com/electron/electron/releases/tag/v44.6.0",
     "version": "44.6.0"
   },
-  "checkedOn": "2026-10-07",
+  "checkedOn": "2026-10-08",
   "llamaVulkan": {
     "source": "https://github.com/ggml-org/llama.cpp/releases/tag/b11429",
     "version": "b11429",
@@ -35,5 +36,13 @@
     "archive": "https://dist.torproject.org/torbrowser/15.0.24/tor-expert-bundle-windows-x86_64-15.0.24.tar.gz",
     "checksums": "https://dist.torproject.org/torbrowser/15.0.24/sha256sums-signed-build.txt",
     "sha256": "e9dc6ccc93cd6afa507193f4de284d6424233ff5102155cd2c94b259e8a22b65"
+  },
+  "previousModel": {
+    "parameters": "4B",
+    "name": "Qwen3-4B-Q4_K_M",
+    "bytes": 2497280256,
+    "source": "https://huggingface.co/Qwen/Qwen3-4B-GGUF",
+    "revision": "bc640142c66e1fdd12af0bd68f40445458f3869b",
+    "sha256": "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5"
   }
 }

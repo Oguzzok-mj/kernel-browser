@@ -1,0 +1,24 @@
+const fs=require('node:fs'),path=require('node:path'),http=require('node:http'),assert=require('node:assert/strict');
+const delay=ms=>new Promise(r=>setTimeout(r,ms));
+async function until(fn){const end=Date.now()+20000;while(Date.now()<end){if(await fn())return;await delay(80);}throw Error('VPN check timed out');}
+exports.run=async api=>{
+  const {app,win,connection,tabs}=api,root=app.getPath('userData'),report={ok:false,checks:[]};let server,proxy;const seen=[];
+  const js=code=>win.webContents.executeJavaScript(code,true),log=text=>{report.checks.push(text);console.log('PASS '+text);};
+  try{
+    await until(()=>js('!!window.kernelUI && !!document.getElementById("vpn-toggle")'));
+    server=http.createServer((req,res)=>{res.setHeader('Content-Type','text/html');res.end('<title>VPN fixture</title><p>Direct or proxy</p>');});await new Promise(r=>server.listen(0,'127.0.0.1',r));const origin='http://127.0.0.1:'+server.address().port;
+    proxy=http.createServer((req,res)=>{seen.push(req.url);const url=new URL(req.url),request=http.request(url,response=>{res.writeHead(response.statusCode,response.headers);response.pipe(res);});request.on('error',()=>res.end('Proxy error'));req.pipe(request);});await new Promise(r=>proxy.listen(0,'127.0.0.1',r));
+    const profileId=connection.saveProxy({name:'VPN fixture',type:'http',host:'127.0.0.1',port:proxy.address().port}),tabId=api.createTab(origin+'/?initial'),tab=tabs.find(t=>t.id===tabId);
+    await until(()=>tab.view?.webContents.getTitle()==='VPN fixture');
+    await js('window.kernel.call("connection:apply",'+JSON.stringify({tabId,scope:'site',mode:'proxy',profileId})+')');
+    await until(()=>tab.networkPartition!==connection.basePartition&&tab.view?.webContents.getTitle()==='VPN fixture'&&seen.length>0);
+    const routedSession=tab.view.webContents.session;await routedSession.cookies.set({url:origin,name:'login',value:'preserved'});await until(()=>js('document.getElementById("vpn-label").textContent==="VPN вкл"'));log('Toolbar displays VPN on for an actual HTTP proxy route');
+    const previous=tab.view.webContents;await js('document.getElementById("vpn-toggle").click()');await until(()=>connection.enabled===false&&tab.view?.webContents!==previous&&tab.view?.webContents.getTitle()==='VPN fixture'&&!tab.view.webContents.isLoading());
+    assert.equal(connection.providers.size,0);assert.equal(tab.view.webContents.session,routedSession);assert.equal((await routedSession.cookies.get({url:origin,name:'login'}))[0].value,'preserved');
+    api.navigate(origin+'/?off-current');await until(()=>tab.view.webContents.getURL().includes('off-current')&&!tab.view.webContents.isLoading());assert.ok(!seen.some(url=>url.includes('off-current')));
+    const newId=api.createTab(origin+'/?off-new');await until(()=>tabs.find(t=>t.id===newId).view?.webContents.getTitle()==='VPN fixture');assert.ok(!seen.some(url=>url.includes('off-new')));assert.equal(connection.policy(newId,origin).mode,'direct');
+    assert.equal(JSON.parse(fs.readFileSync(connection.file)).enabled,false);await until(()=>js('document.getElementById("vpn-label").textContent==="VPN выкл"'));log('VPN off bypasses remembered site rules for existing and new tabs, stops the gateway, retains logins and persists');
+    const beforeResume=tab.view.webContents;await js('document.getElementById("vpn-toggle").click()');await until(()=>connection.enabled&&tab.view?.webContents!==beforeResume&&connection.state(tabId,origin).state==='connected'&&tab.view?.webContents.getTitle()==='VPN fixture'&&!tab.view.webContents.isLoading());api.selectTab(tabId);api.navigate(origin+'/?resumed-proxy');await until(()=>seen.some(url=>url.includes('resumed-proxy'))&&!tab.view.webContents.isLoading());assert.equal(connection.policy(tabId,origin).profileId,profileId);assert.equal(tab.view.webContents.session,routedSession);log('Clicking VPN off restores the saved proxy route without losing the cookie session');
+    await js('window.kernel.call("panel","connection")');await until(()=>js('document.getElementById("connection-power").textContent.includes("Отключить")'));await js('document.getElementById("connection-power").onclick()');await until(()=>connection.enabled===false&&connection.providers.size===0&&tabs.every(t=>!t.view||!t.view.webContents.isLoading()));log('The Connection panel also provides the browser-wide off button');report.ok=true;
+  }catch(error){report.error=error.stack;report.diagnostic={enabled:connection.enabled,seen,tabs:tabs.map(t=>({url:t.url,actualURL:t.view?.webContents.getURL(),error:t.error,loading:t.view?.webContents.isLoading(),partition:t.networkPartition}))};console.error(error);}finally{connection.dispose();server?.closeAllConnections();server?.close();proxy?.closeAllConnections();proxy?.close();fs.writeFileSync(path.join(root,'verification-vpn.json'),JSON.stringify(report,null,2));app.exit(report.ok?0:1);}
+};

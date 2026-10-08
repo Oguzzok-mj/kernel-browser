@@ -50,7 +50,7 @@ Function KernelWelcome
   !insertmacro KernelLabel 10u 12u 280u 42u "Kernel"
   SendMessage $KernelLabel ${WM_SETFONT} $KernelTitleFont 1
   !insertmacro KernelLabel 12u 52u 280u 18u "Браузер для рабочего стола."
-  !insertmacro KernelLabel 12u 80u 280u 32u "Вкладки слева, локальный чат и инструменты для работы со страницами — справа."
+  !insertmacro KernelLabel 12u 80u 280u 32u "Вкладки слева, локальный чат и инструменты для работы со страницами - справа."
   !insertmacro KernelLabel 12u 124u 280u 26u "${VERSION}  /  Windows x64$\r$\nУстановка для текущего пользователя."
   SetCtlColors $KernelLabel 969BA3 111213
   nsDialogs::Show
@@ -68,7 +68,7 @@ Function KernelFinish
   !insertmacro KernelLabel 10u 12u 280u 42u "Готово."
   SendMessage $KernelLabel ${WM_SETFONT} $KernelTitleFont 1
   !insertmacro KernelLabel 12u 54u 280u 32u "Ярлык Kernel добавлен на рабочий стол и в меню «Пуск». Существующий профиль сохранён."
-  !insertmacro KernelLabel 12u 95u 280u 28u "Модель чата загружается отдельно при первом использовании — около 2,5 ГБ."
+  !insertmacro KernelLabel 12u 95u 280u 28u "Модель чата загружается отдельно при первом использовании - около 7,5 ГБ."
   SetCtlColors $KernelLabel 969BA3 111213
   ${NSD_CreateCheckbox} 12u 132u 270u 15u "Открыть Kernel"
   Pop $KernelLaunch

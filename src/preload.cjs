@@ -3,8 +3,10 @@ const allowed = new Set(['state','tab:new','tab:select','tab:close','tab:pin','t
 for(const name of ['settings:reset','download:directory','privacy:clear','permissions:reset','home','find','find:close','browser:menu'])allowed.add(name);
 for(const name of ['account:create','account:login','account:logout','account:update','account:password','account:avatar','account:copy-id'])allowed.add(name);
 for(const name of ['updates:check','updates:automatic','updates:install'])allowed.add(name);
-for(const name of ['tools','palette:set','connection:apply','connection:proxy','connection:remove-profile','connection:options','connection:rule','connection:diagnose','download:pause','download:resume','download:retry'])allowed.add(name);
+for(const name of ['tools','palette:set','connection:apply','connection:enabled','connection:proxy','connection:remove-profile','connection:options','connection:rule','connection:diagnose','download:pause','download:resume','download:retry'])allowed.add(name);
 const events = new Set(['state','focus-address','ai-status','ai-token','ai-action','ai-done','bypass-status','ask-selection']);
+for(const name of ['advanced','command:suggest','command:run','ai:provider','ai:model-select'])allowed.add(name);
+for(const name of ['advanced-open','settings-open'])events.add(name);
 for(const name of ['tools-log','tools-result','tools-command','palette-open','palette-close','page-context-enable'])events.add(name);
 events.add('focus-find');events.add('find-result');
 contextBridge.exposeInMainWorld('kernel', {

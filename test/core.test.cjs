@@ -16,12 +16,10 @@ test('addresses distinguish search, remote URLs and local development',()=>{
 test('address bar blocks script, file and external application protocols',()=>{
   for(const url of ['javascript:alert(1)','data:text/html,<script>','file:///C:/Windows','cmd:calc','httpsx://host']) assert.throws(()=>normalizeAddress(url));
 });
-test('pinned zapret strategies parse as executable arguments without a shell',()=>{
+test('all bundled zapret strategies parse as executable arguments without a shell',()=>{
   const root=path.resolve(__dirname,'../vendor/zapret/zapret-discord-youtube-1.10.3');
-  const bundled=fs.existsSync(root);
-  const profiles=bundled?fs.readdirSync(root).filter(n=>/^general.*\.bat$/.test(n)).map(name=>({name,text:fs.readFileSync(path.join(root,name),'utf8')})):JSON.parse(fs.readFileSync(path.join(__dirname,'fixtures/zapret-strategies.json'),'utf8'));
-  assert.ok(profiles.length>=10);
-  for(const p of profiles){const args=parseStrategy(p.text,root); assert.ok(args.length>20,p.name); assert.ok(args.every(a=>a.startsWith('--')&&!a.includes('%')),p.name); if(bundled)for(const a of args){const name=a.slice(a.indexOf('=')+1);if(name.startsWith(root))assert.ok(fs.existsSync(name)||name.endsWith('-user.txt'),name);}}
+  const profiles=fs.readdirSync(root).filter(n=>/^general.*\.bat$/.test(n)); assert.ok(profiles.length>=10);
+  for(const p of profiles){const args=parseStrategy(fs.readFileSync(path.join(root,p),'utf8'),root); assert.ok(args.length>20,p); assert.ok(args.every(a=>a.startsWith('--')&&!a.includes('%')),p); for(const a of args){const name=a.slice(a.indexOf('=')+1);if(name.startsWith(root))assert.ok(fs.existsSync(name)||name.endsWith('-user.txt'),name);}}
 });
 test('unrecognized upstream shell constructs cannot become process arguments',()=>{
   assert.throws(()=>parseStrategy('start "%BIN%winws.exe" --foo=1 & calc.exe','C:\\zapret'));

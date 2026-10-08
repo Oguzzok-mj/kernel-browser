@@ -6,10 +6,12 @@ const DEFAULTS = Object.freeze({
   fontFamily:'Segoe UI', fontSize:13, density:'standard', radius:6, sidebarWidth:232, panelWidth:360,
   showRail:true, showToolbarChat:true, showHomeLogo:true, showShortcuts:true, showDate:false, showHints:false,
   mediaPermission:'block', locationPermission:'block', notificationPermission:'block',clipboardPermission:'block', sitePermissions:{},
-  aiBackend:'auto', aiWarmup:true, aiKeepAlive:15, aiContext:4096, aiMaxTokens:1024, aiTemperature:0.6
+  aiBackend:'auto', aiWarmup:true, aiKeepAlive:15, aiContext:4096, aiMaxTokens:1024, aiTemperature:0.6,
+  aiProvider:'local',aiModelFile:'',trackerBlocking:false,siteTrackerBlocking:{},autoSleep:false,sleepMinutes:30,ghostRoute:'direct',showWorkspaceButton:true
 });
 const enums={search:['google','duckduckgo','bing','yandex'],dnsProvider:['google','cloudflare'],startup:['restore','blank','home'],newTab:['blank','home'],theme:['dark','light','system','custom'],density:['compact','standard','comfortable'],mediaPermission:['allow','block'],locationPermission:['allow','block'],notificationPermission:['allow','block'],clipboardPermission:['allow','block'],aiBackend:['auto','gpu','cpu']};
-const numbers={defaultZoom:[50,200],fontSize:[11,18],radius:[0,16],sidebarWidth:[180,320],panelWidth:[300,500],aiKeepAlive:[0,60],aiContext:[2048,8192],aiMaxTokens:[128,4096],aiTemperature:[0,1.5]};
+enums.aiProvider=['local','compatible'];enums.ghostRoute=['direct','tor'];
+const numbers={defaultZoom:[50,200],fontSize:[11,18],radius:[0,16],sidebarWidth:[180,320],panelWidth:[300,500],aiKeepAlive:[0,60],aiContext:[2048,32768],aiMaxTokens:[128,8192],aiTemperature:[0,1.5],sleepMinutes:[1,240]};
 function sanitizeSettings(input={},base=DEFAULTS){
   const result={...DEFAULTS,...base,sitePermissions:{...(base.sitePermissions||{})}};
   for(const [key,value] of Object.entries(input||{})){
@@ -21,6 +23,8 @@ function sanitizeSettings(input={},base=DEFAULTS){
     else if(key==='fontFamily'){if(typeof value==='string'&&/^[\p{L}\p{N} .,_-]{1,64}$/u.test(value))result[key]=value;}
     else if(key==='homepage'){try{if(value==='kernel://newtab'||['http:','https:'].includes(new URL(value).protocol))result[key]=String(value).slice(0,8192);}catch{}}
     else if(key==='downloadDirectory'){if(typeof value==='string'&&value.length<1024)result[key]=value;}
+    else if(key==='aiModelFile'){if(typeof value==='string'&&value.length<1024&&(!value||/\.gguf$/i.test(value)))result[key]=value;}
+    else if(key==='siteTrackerBlocking'&&value&&typeof value==='object'){result.siteTrackerBlocking={};for(const [origin,enabled]of Object.entries(value).slice(0,200)){try{const u=new URL(origin);if(['http:','https:'].includes(u.protocol)&&typeof enabled==='boolean')result.siteTrackerBlocking[u.origin]=enabled;}catch{}}}
     else if(key==='sitePermissions'&&value&&typeof value==='object'){
       result.sitePermissions={};for(const [origin,permissions]of Object.entries(value).slice(0,200)){
         try{if(!['http:','https:'].includes(new URL(origin).protocol))continue;}catch{continue;}
@@ -29,7 +33,7 @@ function sanitizeSettings(input={},base=DEFAULTS){
       }
     }
   }
-  for(const key of ['fontSize','radius','sidebarWidth','panelWidth','aiKeepAlive','aiContext','aiMaxTokens','defaultZoom'])result[key]=Math.round(result[key]);
+  for(const key of ['fontSize','radius','sidebarWidth','panelWidth','aiKeepAlive','aiContext','aiMaxTokens','defaultZoom','sleepMinutes'])result[key]=Math.round(result[key]);
   return result;
 }
 function viewBounds(width,height,panel,settings,findVisible=false){

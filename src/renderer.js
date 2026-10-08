@@ -35,7 +35,9 @@ function hostname(url) { try { return new URL(url).hostname.replace(/^www\./,'')
 function siteIcon(tab) { if (tab.url === 'kernel://newtab') return icon('home'); if (tab.audible && !tab.muted) return icon('volume');const host=hostname(tab.url);if(host==='youtube.com')return icon('youtube');if(host==='github.com')return icon('github');return icon('globe'); }
 function renderTabs() {
   const pinned = $('pinned-tabs'), regular = $('tabs'); pinned.replaceChildren(); regular.replaceChildren();
+  let previousGroup='';
   for (const tab of current.tabs) {
+    if(!tab.pinned&&tab.group&&tab.group!==previousGroup){const group=current.advanced?.groups.find(g=>g.id===tab.group);if(group){const label=document.createElement('div');label.className='tab-group-label';label.textContent=group.name;label.style.color=group.color;regular.append(label);}}if(!tab.pinned)previousGroup=tab.group||'';
     const row = document.createElement('div'); row.className = 'tab' + (tab.pinned ? ' pinned' : '') + (tab.id === current.activeId ? ' active' : '') + (tab.loading ? ' loading' : ''); row.draggable = true; row.dataset.tabId = tab.id;
     const button = document.createElement('button'); button.className = 'tab-main'; button.dataset.action = 'select'; button.dataset.id = tab.id; button.title = tab.title + '\n' + tab.url; button.setAttribute('aria-label', tab.title); if (tab.id === current.activeId) button.setAttribute('aria-current','page');
     const badge = document.createElement('span'); badge.className = 'site-icon'; badge.innerHTML = siteIcon(tab);
@@ -64,10 +66,16 @@ function renderShortcuts() {
     const label = document.createElement('span'); label.textContent = entry.title; b.append(badge,label); b.onclick = () => call('navigate',entry.url); $('shortcuts').append(b);
   });
 }
+const renderCache=new Map();
+function changedRender(name,value,fn){const key=JSON.stringify(value);if(renderCache.get(name)===key)return;renderCache.set(name,key);fn();}
 function render(state) {
   current = state;
   document.body.classList.toggle('content-fullscreen',state.contentFullscreen);
-  window.kernelTheme.apply(state);
+  changedRender('theme',[state.settings,state.panel,state.overlay,state.darkSystem,state.maximized,innerWidth,innerHeight],()=>window.kernelTheme.apply(state));
+  const vpnActive=!!state.connection?.routingActive||['on','starting'].includes(state.bypass?.phase);
+  $('vpn-label').textContent=vpnActive?'VPN вкл':'VPN выкл';$('vpn-toggle').classList.toggle('enabled',vpnActive);$('vpn-toggle').setAttribute('aria-pressed',String(vpnActive));
+  const vpnTitle=vpnActive?'Отключить VPN во всём браузере · Tor и прокси':state.connection?.enabled===false?'Включить сохранённые маршруты VPN':'VPN отключён · Настройки подключения';
+  $('vpn-toggle').title=vpnTitle;$('vpn-toggle').setAttribute('aria-label',vpnTitle);
   const tab = state.tabs.find(t => t.id === state.activeId);
   if (document.activeElement !== $('address')) $('address').value = tab?.url === 'kernel://newtab' ? '' : tab?.url || '';
   $('back').disabled = !tab?.back; $('forward').disabled = !tab?.forward;
@@ -84,8 +92,8 @@ function render(state) {
   document.querySelectorAll('[data-panel]').forEach(b => b.classList.toggle('active',b.dataset.panel === state.panel));
   $('page-error').classList.toggle('hidden',!tab?.error || state.overlay); $('page-error-text').textContent = tab?.error || '';
   $('findbar').classList.toggle('hidden',!state.findVisible);
-  renderSettings();renderAccount();
-  renderTabs(); renderShortcuts(); renderLists(); renderAIStatus(state.ai); renderBypass(state.bypass);window.kernelTools?.render(state);
+  changedRender('settings',[state.settings,state.updates,state.version,state.downloadDirectory],renderSettings);changedRender('account',[state.account,state.accounts],renderAccount);
+  changedRender('tabs',[state.tabs,state.activeId,state.advanced?.groups],renderTabs);changedRender('shortcuts',state.bookmarks,renderShortcuts);changedRender('lists',[state.panel,state.bookmarks,state.history,state.downloads],renderLists);renderAIStatus(state.ai);renderBypass(state.bypass);window.kernelTools?.render(state);window.kernelAdvanced?.render(state);
 }
 function renderLists() {
   if (!['bookmarks','history','downloads'].includes(current.panel)) return;
@@ -189,9 +197,10 @@ function renderAIStatus(info) {
   $('ai-dot').className='status-dot' + (info.status === 'ready' ? ' on' : ['starting','generating','downloading'].includes(info.status) ? ' busy' : '');
   const installing = info.status === 'downloading';
   $('model-install').classList.toggle('hidden',info.installed && !installing);
-  $('install-model').disabled = false; $('install-model').textContent = installing ? 'Остановить загрузку · ' + info.progress + '%' : 'Скачать модель · 2,5 ГБ';
+  const sizeGB=(info.size/1e9).toLocaleString('ru-RU',{maximumFractionDigits:1});
+  $('install-model').disabled = false; $('install-model').textContent = installing ? 'Остановить загрузку · ' + info.progress + '%' : 'Скачать модель · '+sizeGB+' ГБ';
   $('model-progress').classList.toggle('hidden',!installing); $('model-progress').value = info.progress || 0;
-  $('model-progress-text').textContent = info.status === 'error' ? info.detail || 'Повторите попытку.' : 'Размер загрузки: 2,5 ГБ.';
+  $('model-progress-text').textContent = info.status === 'error' ? info.detail || 'Повторите попытку.' : 'Размер загрузки: '+sizeGB+' ГБ.';
   $('ai-engine-detail').textContent=(info.status==='idle'?'Не запущен':info.backend||labels[info.status])+(info.metrics?.tokensPerSecond?' · '+info.metrics.tokensPerSecond.toFixed(1)+' токенов/с':'')+(info.fallback?' · '+info.fallback:'');
   $('send-message').disabled = !info.installed || generating;
 }
@@ -219,7 +228,7 @@ function appendChat(message) {
   const heading=document.createElement('div'); heading.className='message-heading'; heading.textContent=message.role === 'user' ? 'Вы' : message.role === 'error' ? 'Ошибка' : 'Ассистент';
   const content=document.createElement('div'); content.className='message-content'; markdown(content,message.content);
   div.append(heading,content);
-  for(const action of message.actions || []) { const button=document.createElement('button'); button.className='message-action'; const label=document.createElement('span'); label.textContent='Открыть ' + action.title; button.append(label); const glyph=document.createElement('span'); glyph.innerHTML=icon('arrow-up-right'); button.append(glyph); button.onclick=()=>call('tab:new',action.url); div.append(button); }
+  for(const action of message.actions || []) { const button=document.createElement('button'); button.className='message-action'; const label=document.createElement('span'); label.textContent=action.kind?action.title:'Открыть ' + action.title; button.append(label); const glyph=document.createElement('span'); glyph.innerHTML=icon('arrow-up-right'); button.append(glyph); button.onclick=()=>action.kind?call('advanced',{name:'ai:execute',input:action}).then(r=>{if(r)toast('Действие выполнено.');}):call('tab:new',action.url); div.append(button); }
   $('chat').append(div); return { div,content };
 }
 function renderChat() { $('chat').querySelectorAll('.chat-message').forEach(el=>el.remove()); $('chat-welcome').classList.toggle('hidden',!!chatMessages.length); chatMessages.forEach(appendChat); scrollChat(); }
@@ -228,12 +237,13 @@ function saveChat() { try { localStorage.setItem('kernel-chat',JSON.stringify(ch
 async function sendMessage(text) {
   text = String(text || '').trim(); if (!text || generating) return;
   if (!current?.ai?.installed) { toast('Сначала загрузите модель для чата.'); return; }
+  const requestOptions=window.kernelAdvanced?.aiRequest();if(requestOptions===false)return;
   const user={role:'user',content:text}; chatMessages.push(user); appendChat(user); $('chat-input').value='';
   generating=true; $('send-message').classList.add('hidden'); $('stop-message').classList.remove('hidden'); $('composer-hint').textContent='Обработка…';
   streamingMessage={role:'assistant',content:'',actions:[]}; chatMessages.push(streamingMessage); const elements=appendChat(streamingMessage); streamingMessage.element=elements;
   scrollChat();
   try {
-    await window.kernel.call('ai:send',{messages:chatMessages.filter(m=>m.role !== 'error' && m !== streamingMessage).map(({role,content})=>({role,content})),context:$('page-context').checked});
+    await window.kernel.call('ai:send',{messages:chatMessages.filter(m=>m.role !== 'error' && m !== streamingMessage).map(({role,content})=>({role,content})),context:requestOptions?.context??$('page-context').checked,remoteConsent:requestOptions?.remoteConsent||false});
     if (!streamingMessage.content && !streamingMessage.actions.length) { streamingMessage.content='Ответ остановлен.'; markdown(elements.content,streamingMessage.content); }
   } catch(e) {
     if (!streamingMessage.content) { streamingMessage.role='error'; streamingMessage.content=e.message.replace(/^Error invoking remote method '[^']+': Error: /,''); }
@@ -250,7 +260,7 @@ window.kernel.on('ai-token',token=>{
   if(!scheduled) { scheduled=true; requestAnimationFrame(()=>{ scheduled=false; if(!streamingMessage?.element) return; markdown(streamingMessage.element.content,streamingMessage.content); scrollChat(); }); }
 });
 window.kernel.on('ai-action',action=>{ if(!streamingMessage) return; streamingMessage.actions.push(action); });
-window.kernel.on('ask-selection',text=>{ $('chat-input').value='Объясни выделенный текст:\n\n'+text; $('chat-input').focus(); });
+window.kernel.on('ask-selection',text=>{ $('chat-input').value=text; $('chat-input').focus(); });
 document.addEventListener('click',async event=>{
   const button=event.target.closest('[data-action]'); if(!button) return; const action=button.dataset.action;
   if(action==='new') { await call('tab:new'); $('address').focus(); }
@@ -260,6 +270,11 @@ document.addEventListener('click',async event=>{
   else if(action==='back'||action==='forward') call('history:navigate',action);
   else if(action==='reload') call('reload');
   else if(action==='home'||action==='browser-menu') call(action==='home'?'home':'browser:menu');
+  else if(action==='vpn-toggle') {
+    if(current.connection?.routingActive||['on','starting'].includes(current.bypass?.phase)){await call('connection:enabled',false);toast('VPN отключён. Прямое соединение во всех вкладках.');}
+    else if(current.connection?.enabled===false){await call('connection:enabled',true);toast('Сохранённые маршруты VPN включены.');}
+    else call('panel','connection');
+  }
   else if(action==='bookmark') call('bookmark');
   else if(action==='collapse') call('settings',{collapsed:!current.settings.collapsed});
   else if(['ai','bypass','history','bookmarks','downloads','tools','connection'].includes(action)) call('panel',current.panel===action?'':action);

@@ -9,12 +9,13 @@ The packaged distribution includes Electron's `LICENSE.electron.txt` and Chromiu
 
 ## Local chat
 
-Kernel's local chat uses the unmodified Qwen3-4B Q4_K_M GGUF weights from Qwen, licensed under Apache 2.0.
+Kernel's local chat uses Mistral NeMo Instruct 2407 (12B), quantized to Q4_K_M GGUF by bartowski, licensed under Apache 2.0.
 
-- Model: https://huggingface.co/Qwen/Qwen3-4B-GGUF
-- Pinned model repository revision: `bc640142c66e1fdd12af0bd68f40445458f3869b`
-- Original developers: Qwen / Alibaba Cloud
-- License: `vendor/QWEN-LICENSE.txt`
+- Original model: https://huggingface.co/mistralai/Mistral-Nemo-Instruct-2407
+- Quantized weights: https://huggingface.co/bartowski/Mistral-Nemo-Instruct-2407-GGUF
+- Pinned model repository revision: `a2dd64a0a76ea1bdb2bb6ab6fa5496b003c7c908`
+- Original developers: Mistral AI / NVIDIA
+- License: `vendor/MISTRAL-LICENSE.txt`
 - Inference runtime: llama.cpp b11429, commit d81235049, MIT
 - Runtime source: https://github.com/ggml-org/llama.cpp/tree/b11429
 - Backends: Windows CPU x64 and Vulkan x64

@@ -1,8 +1,8 @@
 {
   "name": "kernel-browser",
   "productName": "Kernel",
-  "version": "0.4.3",
-  "description": "Browser with vertical tabs, configurable interface and local chat",
+  "version": "0.5.2",
+  "description": "Desktop browser with vertical tabs, workspaces, local AI, privacy and page tools",
   "main": "src/main.cjs",
   "author": "Kernel contributors",
   "license": "MIT",
@@ -33,7 +33,8 @@
       "package.json",
       "LICENSE",
       "THIRD-PARTY-NOTICES.md",
-      "test/*smoke.cjs"
+      "test/*smoke.cjs",
+      "test/advanced-checks.cjs"
     ],
     "extraResources": [
       {

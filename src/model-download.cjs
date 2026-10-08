@@ -6,7 +6,7 @@ const { Readable } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
 const model = require('./model.cjs');
 
-async function downloadModel(dest, signal, onProgress) {
+async function downloadModel(dest, signal, onProgress, {concurrency=6}={}) {
   const directory = dest + '.chunks'; await fsp.mkdir(directory, { recursive: true });
   const size = 8 * 1024 * 1024, count = Math.ceil(model.bytes / size);
   let next = 0, received = 0;
@@ -29,7 +29,7 @@ async function downloadModel(dest, signal, onProgress) {
       }
     }
   }
-  const results = await Promise.allSettled(Array.from({length:6},worker));
+  const results = await Promise.allSettled(Array.from({length:Math.max(1,Math.min(16,Math.floor(concurrency)||6))},worker));
   const failure = results.find(r=>r.status==='rejected'); if(failure)throw failure.reason;
   signal.throwIfAborted();
   const hash = crypto.createHash('sha256');
